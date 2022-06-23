@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: modx
+  labels:
+    app: modx
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: modx
+    tier: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modx
+  labels:
+    app: modx
+spec:
+  selector:
+    matchLabels:
+      app: modx
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: modx
+        tier: frontend
+    spec:
+      containers:
+      - image: voyager1122/modx:270
+        name: modx
+        env:
+        - name: MODX_DB_HOST
+          value: 'mysql:3306'
+        - name: MODX_DB_PASSWORD
+          value: modx
+        - name: MODX_DB_USER
+          value: modx
+        - name: MODX_DB_NAME
+          value: modx
+        ports:
+        - containerPort: 80
+          name: modx
+        volumeMounts:
+        - name: modx-persistent-storage
+          mountPath: /var/www/html
+      volumes:
+      - name: modx-persistent-storage
+        persistentVolumeClaim:
+          claimName: modx-web-pv-claim
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv-modx-web
+  labels:
+    type: nfs
+    name: modx-web-nfs
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /mnt/IT-Academy/nfs-data/sa2-20-22/Ivan_Fanchenko/modx
+    server: 192.168.37.105
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: modx-web-pv-claim
+  labels:
+    app: modx
+    name: modx-web-pv-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  selector:
+    matchLabels:
+      name: modx-web-nfs
+      type: nfs
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-modx-web
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/server-alias: "modx.k8s-53.sa"
+spec:
+  rules:
+    - host: modx.k8s-53.sa
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: modx
+                port:
+                  number: 80

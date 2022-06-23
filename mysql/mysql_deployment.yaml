@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: modx
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: modx
+    tier: mysql
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: modx
+spec:
+  selector:
+    matchLabels:
+      app: modx
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: modx
+        tier: mysql
+    spec:
+      containers:
+      - image: voyager1122/mysql:latest 
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: modx-mysql-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: modx-mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: modx-mysql-pv-claim
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv-modx-mysql
+  labels:
+    type: nfs
+    name: modx-mysql-nfs
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /mnt/IT-Academy/nfs-data/sa2-20-22/Ivan_Fanchenko/modx_mysql
+    server: 192.168.37.105
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: modx-mysql-pv-claim
+  labels:
+    app: modx
+    name: modx-mysql-pv-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  selector:
+    matchLabels:
+      name: modx-mysql-nfs
+      type: nfs
