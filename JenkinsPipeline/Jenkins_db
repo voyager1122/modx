@@ -29,15 +29,26 @@ pipeline {
       }
     }
     
-    stage('Push Image to DockerHub') {
-      steps{
+        
+    stage("Push Image to DockerHub") {
+      steps {
         script {
-            docker.withRegistry('', 'docker_hub') {
-            dockerImageMysql.push("${env.BUILD_ID}")
+          catchError (buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+            try {
+              docker.withRegistry('', 'docker_hub') {
+              dockerImageMysql.push("${env.BUILD_ID}")
+            }
+              stagestatus.Docker_PUSH = "Success"
+            } catch (Exception err) {
+              stagestatus.Docker_PUSH = "Failure"
+              error "Image pushing error"
+              }
           }
         }
       }
     }
+    
+    
    
     stage('Remove Unused docker image') {
       when { expression { stagestatus.find{ it.key == "Docker_BUILD" }?.value == "Success" } }
@@ -64,18 +75,33 @@ pipeline {
         }
     }    
     
-    stage('Deploy in cluster') {
-        when { expression { stagestatus.find{ it.key == "Kubeval" }?.value == "Success" } }
+    stage('Deploy/Upgrade in cluster') {
+        when { 
+          allOf {
+            expression { stagestatus.find{ it.key == "Docker_PUSH" }?.value == "Success" }
+            expression { stagestatus.find{ it.key == "Kubeval" }?.value == "Success" }
+          }
+        }      
         steps {
           script {
             catchError (buildResult: 'SUCCESS', stageResult: 'FAILURE') {
               try {
-                sh "kubectl scale --replicas=0 deployment/mysql --namespace default"
-                sh "kubectl delete -l name=modx-mysql-pv-claim -f ./mysql/mysql_deployment.yaml --namespace default"
-                sh "kubectl apply -l name=modx-mysql-pv-claim -f ./mysql/mysql_deployment.yaml --namespace default"
-                sh "kubectl set image deployment/mysql mysql=$mysql:${env.BUILD_ID} --namespace default"
-                sh "kubectl scale --replicas=1 deployment/mysql --namespace default"
-                stagestatus.Deploy = "Success"
+                
+                if (sh(returnStdout: true, script: 'kubectl get deployment mysql --ignore-not-found --namespace default') == '') {
+                  sh """
+                      sed -i "s|latest|${env.BUILD_ID}|g" ./mysql/mysql_deployment.yaml
+                      kubectl apply -f ./mysql/mysql_deployment.yaml --namespace=default
+                    """
+                }
+                else {                
+                
+                  sh "kubectl scale --replicas=0 deployment/mysql --namespace default"
+                  sh "kubectl delete -l name=modx-mysql-pv-claim -f ./mysql/mysql_deployment.yaml --namespace default"
+                  sh "kubectl apply -l name=modx-mysql-pv-claim -f ./mysql/mysql_deployment.yaml --namespace default"
+                  sh "kubectl set image deployment/mysql mysql=$mysql:${env.BUILD_ID} --namespace default"
+                  sh "kubectl scale --replicas=1 deployment/mysql --namespace default"
+                  stagestatus.Deploy = "Success"
+                }
               } catch (Exception err) {
                 stagestatus.Deploy = "Failure"
                 error "Deploy failed"
