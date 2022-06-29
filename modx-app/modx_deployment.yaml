@@ -36,12 +36,18 @@ spec:
         env:
         - name: MODX_DB_HOST
           value: 'mysql:3306'
-        - name: MODX_DB_PASSWORD
-          value: modx
-        - name: MODX_DB_USER
-          value: modx
         - name: MODX_DB_NAME
           value: modx
+        - name: MODX_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MODX_DB_USER
+        - name: MODX_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MODX_DB_PASSWORD
         ports:
         - containerPort: 80
           name: modx

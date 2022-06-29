@@ -8,13 +8,16 @@ pipeline {
     image_app = "voyager1122/modx"
     registry = "registry.hub.docker.com"
   }
+  
   agent any
+  
   stages {
     stage('Cloning Git') {
       steps {
         git url: 'https://github.com/voyager1122/modx.git', branch: 'main', credentialsId: "jenkins_git"
       }
     }
+    
     stage('Building image') {
       steps{
         script {
@@ -23,21 +26,30 @@ pipeline {
             stagestatus.Docker_BUILD = "Success"
           } catch (Exception err) {
             stagestatus.Docker_BUILD = "Failure"
-            error "Dockerfile is broken, please check your Dockerfile"
+            error "Something wrong with Dockerfile"
           }
         }
       }
     }
     
-    stage('Deploy Image') {
+    stage('Push APP image to DockerHub') {
       steps{
         script {
-            docker.withRegistry('', 'docker_hub') {
-            dockerImage.push("${env.BUILD_ID}")
+          catchError (buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+            try {
+              docker.withRegistry('', 'docker_hub') {
+              dockerImage.push("${env.BUILD_ID}")
+            }
+              stagestatus.Docker_PUSH = "Success"
+            } catch (Exception err) {
+              stagestatus.Docker_PUSH = "Failure"
+              error "APP image pushing error"
+              }
           }
         }
       }
     }
+    
     
     stage('Remove Unused docker image') {
       steps{
@@ -63,18 +75,33 @@ pipeline {
     }    
      
 	  
-    stage('Deploy in cluster') {
-        when { expression { stagestatus.find{ it.key == "Kubeval" }?.value == "Success" } }
+    stage('Deploy/Upgrade in K8s') {
+        when { 
+          allOf {
+            expression { stagestatus.find{ it.key == "Docker_PUSH" }?.value == "Success" }
+            expression { stagestatus.find{ it.key == "Kubeval" }?.value == "Success" }
+          }
+        }  
         steps {
           script {
             catchError (buildResult: 'SUCCESS', stageResult: 'FAILURE') {
               try {
+                
+                
+                if (sh(returnStdout: true, script: 'kubectl get deployment modx --ignore-not-found --namespace default') == '') {
+                  sh """
+                      sed -i "s|270|${env.BUILD_ID}|g" ./modx-app/modx_deployment.yaml
+                      kubectl apply -f ./modx-app/modx_deployment.yaml --namespace=default
+                    """
+                }
+                else { 
                 sh "kubectl scale --replicas=0 deployment/modx --namespace default"
                 sh "kubectl delete -l name=modx-web-pv-claim -f ./modx-app/modx_deployment.yaml --namespace default"
                 sh "kubectl apply -l name=modx-web-pv-claim -f ./modx-app/modx_deployment.yaml --namespace default"
                 sh "kubectl set image deployment/modx modx=$image_app:${env.BUILD_ID} --namespace default"
                 sh "kubectl scale --replicas=1 deployment/modx --namespace default"
                 stagestatus.Deploy = "Success"
+                }
               } catch (Exception err) {
                 stagestatus.Deploy = "Failure"
                 error "Deploy failed"
