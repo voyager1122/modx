@@ -1,7 +1,6 @@
 def stagestatus = [:]
 
 pipeline {
-  triggers { pollSCM 'H * * * 1-5' }
   environment {
     credential = 'voyager1122'
     mysql = "voyager1122/mysql"
