@@ -14,7 +14,7 @@
 
 - DB: MySQL 5.7
 
-- Web server: Apache  2.4.53
+- Web server: Apache  2.4.38
 
 ---
 
