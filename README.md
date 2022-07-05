@@ -53,23 +53,27 @@ The first time the pipeline is started manually.
 - Stage "**Push Image to DockerHub**": push image to dockerhub with image name and build id.
 - Stage "**Remove Unused docker image**": remove image to save disk space.
 - Stage "**Testing YAML syntax**": Testing manifests by kubeval.
-- Stage "**Deploy in cluster**": Deploy in k8s cluster if testing yaml success.
+- Stage "**Deploy/Upgrade in cluster**": Deploy in k8s cluster if testing yaml success.
 
 Finish stage - send notification to Slack.
 
 ### Job Deploy App
+
+App's version number can  be controlled in Dockerfile (environment virable MODX_VERSION 2.7.x)
+When docker image is building a script will download source code of the requested version into docker image.
+
 - Stage "**Cloning Git**": cloning git branch to localhost.
 - Stage "**Building image**": build image from ./Dockerfile
 - Stage "**Push Image to DockerHub**": push image to dockerhub with image name and build id.
 - Stage "**Remove Unused docker image**": remove image to save disk space.
 - Stage "**Testing YAML syntax**": Testing manifests by kubeval.
-- Stage "**Deploy in cluster**": Deploy in k8s cluster if testing yaml success.
+- Stage "**Deploy/Upgrade in cluster**": Deploy in k8s cluster if testing yaml success.
 
 Finish stage - send notification to Slack.
 
 ## Rollback flow description and implementation:
 
-If the "**Deploy/Upgrade**" stage or the "**Deployment Test**" stage fails, then the "**Rollback**" stage is executed, which rolls back the deployment to the previous image.
+If the "**Deploy/Upgrade**" stage fails, then the "**Rollback**" stage is executed, which rolls back the deployment to the previous image.
 
 ## Links:
 
